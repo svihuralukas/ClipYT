@@ -306,7 +306,9 @@ if st.button("Download clip", type="primary", use_container_width=True):
 
         status_text.success("Download completed!")
 
-        st.success("File created successfully!")
+        st.success("Súbor bol úspešne vytvorený a uložený!")
+
+        st.info(f"📁 Uložené do: `{video_path.resolve()}`")
 
         if expected_extension == ".mp3":
             st.audio(str(video_path))
@@ -314,25 +316,24 @@ if st.button("Download clip", type="primary", use_container_width=True):
             st.video(str(video_path))
 
         st.write(
-            f"Size: "
-            f"{video_path.stat().st_size / 1024 / 1024:.2f} MB"
+            f"Veľkosť: {video_path.stat().st_size / 1024 / 1024:.2f} MB"
         )
 
-        file_bytes = video_path.read_bytes()
+        # file_bytes = video_path.read_bytes()
 
-        mime_type = (
-            "audio/mpeg"
-            if expected_extension == ".mp3"
-            else "video/mp4"
-        )
+        # mime_type = (
+        #     "audio/mpeg"
+        #     if expected_extension == ".mp3"
+        #     else "video/mp4"
+        # )
 
-        st.download_button(
-            "Download",
-            data=file_bytes,
-            file_name=video_path.name,
-            mime=mime_type,
-            use_container_width=True
-        )
+        # st.download_button(
+        #     "Download",
+        #     data=file_bytes,
+        #     file_name=video_path.name,
+        #     mime=mime_type,
+        #     use_container_width=True
+        # )
 
     except Exception as e:
         status_text.error("Downloading or processing failed.")

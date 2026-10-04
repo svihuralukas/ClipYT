@@ -11,7 +11,7 @@ from yt_dlp.utils import download_range_func
 import streamlit as st
 
 APP_DIR = Path(__file__).parent
-OUTPUT_DIR = APP_DIR / "clips"
+OUTPUT_DIR = Path.home() / "Downloads"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 st.set_page_config(

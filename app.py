@@ -306,9 +306,9 @@ if st.button("Download clip", type="primary", use_container_width=True):
 
         status_text.success("Download completed!")
 
-        st.success("Súbor bol úspešne vytvorený a uložený!")
+        st.success("File was successfully created and saved!")
 
-        st.info(f"📁 Uložené do: `{video_path.resolve()}`")
+        st.info(f"Saved to: `{video_path.resolve()}`")
 
         if expected_extension == ".mp3":
             st.audio(str(video_path))
@@ -316,7 +316,7 @@ if st.button("Download clip", type="primary", use_container_width=True):
             st.video(str(video_path))
 
         st.write(
-            f"Veľkosť: {video_path.stat().st_size / 1024 / 1024:.2f} MB"
+            f"Size: {video_path.stat().st_size / 1024 / 1024:.2f} MB"
         )
 
         # file_bytes = video_path.read_bytes()

@@ -52,6 +52,7 @@ def get_video_info(url):
         "--dump-single-json",
         "--no-playlist",
         "--skip-download",
+        "--js-runtimes", "node",
         url
     ]
 
@@ -467,6 +468,8 @@ if download_video or download_audio:
         "postprocessor_hooks": [postprocessor_hook],
         "quiet": True,
         "no_warnings": True,
+        # YouTube JS challenges need a runtime + yt-dlp-ejs; yt-dlp only enables deno by default.
+        "js_runtimes": {"node": {}},
     }
 
     if output_format == "MP3 (Audio)":

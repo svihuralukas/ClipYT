@@ -16,6 +16,10 @@ clips/*
 .vscode/
 .idea/
 
+# Claude Code
+CLAUDE.md
+.claude/
+
 # OS
 .DS_Store
 Thumbs.db

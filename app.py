@@ -1,9 +1,8 @@
 
-import re
 import subprocess
 import sys
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from urllib.parse import urlparse
 import yt_dlp
 from yt_dlp.utils import download_range_func
@@ -29,43 +28,6 @@ url = st.text_input(
     placeholder="https://www.youtube.com/watch?v=..."
 )
 
-col1, col2 = st.columns(2)
-
-with col1:
-    start = st.text_input("Start (HH:MM:SS)", "00:00:00")
-
-with col2:
-    end = st.text_input("End (HH:MM:SS)", "00:01:00")
-
-quality = st.selectbox(
-    "Output quality",
-    [
-        "Best available",
-        "720",
-        "1080",
-        "1440",
-        "2160"
-    ],
-    index=0,
-    format_func=lambda x: (
-        "Best available (maximum)"
-        if x == "Best available"
-        else f"{x}p"
-    )
-)
-
-output_format = st.selectbox(
-    "Output format",
-    ["MP4 (Video)", "MP3 (Audio)"]
-)
-
-def valid_time(value):
-    return bool(re.fullmatch(r"\d{2,}:\d{2}:\d{2}", value))
-
-def seconds(value):
-    h, m, s = map(int, value.split(":"))
-    return h * 3600 + m * 60 + s
-
 def valid_youtube_url(value):
     try:
         host = urlparse(value).hostname or ""
@@ -79,6 +41,7 @@ def valid_youtube_url(value):
     except Exception:
         return False
 
+@st.cache_data(show_spinner="Loading video information...")
 def get_video_duration(url):
     command = [
         sys.executable,
@@ -104,21 +67,22 @@ def get_video_duration(url):
 
     return info.get("duration")
 
+def to_seconds(value):
+    return value.hour * 3600 + value.minute * 60 + value.second
+
+def to_time(value):
+    return time(value // 3600, (value % 3600) // 60, value % 60)
+
+if not url:
+    st.info("Paste a YouTube URL to load the video.")
+    st.stop()
+
+if not valid_youtube_url(url):
+    st.error("Enter a valid YouTube URL.")
+    st.stop()
+
 try:
     duration = get_video_duration(url)
-
-    if duration is None:
-        st.error("Failed to fetch video information.")
-        st.stop()
-
-    if seconds(end) > duration:
-        st.error(
-            f"End time ({end}) exceeds "
-            f"video length ({duration // 3600:02d}:"
-            f"{(duration % 3600) // 60:02d}:"
-            f"{duration % 60:02d})."
-        )
-        st.stop()
 
 except subprocess.TimeoutExpired:
     st.error("Loading video information timed out. Please try again.")
@@ -128,18 +92,54 @@ except Exception as e:
     st.error(f"Error during video processing: {e}")
     st.stop()
 
+if duration is None:
+    st.error("Failed to fetch video information.")
+    st.stop()
+
+duration = int(duration)
+
+start_time, end_time = st.slider(
+    "Clip range",
+    min_value=time(0, 0, 0),
+    max_value=to_time(duration),
+    value=(time(0, 0, 0), to_time(min(60, duration))),
+    step=timedelta(seconds=1),
+    format="HH:mm:ss",
+    key=f"range_{url}"
+)
+
+start = to_seconds(start_time)
+end = to_seconds(end_time)
+
+st.caption(
+    f"Clip length: {to_time(max(end - start, 0)).strftime('%H:%M:%S')}"
+)
+
+quality = st.selectbox(
+    "Output quality",
+    [
+        "Best available",
+        "720",
+        "1080",
+        "1440",
+        "2160"
+    ],
+    index=0,
+    format_func=lambda x: (
+        "Best available (maximum)"
+        if x == "Best available"
+        else f"{x}p"
+    )
+)
+
+output_format = st.selectbox(
+    "Output format",
+    ["MP4 (Video)", "MP3 (Audio)"]
+)
 
 if st.button("Download clip", type="primary", use_container_width=True):
 
-    if not valid_youtube_url(url):
-        st.error("Enter a valid YouTube URL.")
-        st.stop()
-
-    if not valid_time(start) or not valid_time(end):
-        st.error("Time must be in HH:MM:SS format.")
-        st.stop()
-
-    if seconds(end) <= seconds(start):
+    if end <= start:
         st.error("End time must be later than start time.")
         st.stop()
 
@@ -261,7 +261,7 @@ if st.button("Download clip", type="primary", use_container_width=True):
         "overwrites": True,
         "download_ranges": download_range_func(
             None,
-            [(seconds(start), seconds(end))]
+            [(start, end)]
         ),
         "progress_hooks": [progress_hook],
         "postprocessor_hooks": [postprocessor_hook],

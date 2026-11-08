@@ -323,6 +323,17 @@ quality = st.selectbox(
     )
 )
 
+precise_cut = st.checkbox(
+    "Precise cut (slower)",
+    value=False,
+    help=(
+        "Re-encodes the video so the clip starts exactly at the selected time. "
+        "Without it the download is much faster, but the clip may start a few "
+        "seconds earlier (at the nearest keyframe). Very slow for 4K. "
+        "Applies to video only."
+    )
+)
+
 download_video = st.button("Download clip", type="primary", use_container_width=True)
 download_audio = st.button("Download audio (MP3)", use_container_width=True)
 
@@ -492,7 +503,7 @@ if download_video or download_audio:
                 else f"bv*[height<={quality}]+ba/b[height<={quality}]"
             ),
             "merge_output_format": "mp4",
-            "force_keyframes_at_cuts": True,
+            "force_keyframes_at_cuts": precise_cut,
         })
 
     try:

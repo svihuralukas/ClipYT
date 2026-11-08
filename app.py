@@ -43,7 +43,7 @@ def valid_youtube_url(value):
         return False
 
 @st.cache_data(show_spinner="Loading video information...")
-def get_video_duration(url):
+def get_video_info(url):
     command = [
         sys.executable,
         "-m", "yt_dlp",
@@ -66,7 +66,114 @@ def get_video_duration(url):
     import json
     info = json.loads(result.stdout)
 
-    return info.get("duration")
+    return info.get("duration"), info.get("id")
+
+# YouTube player that loads once and only seeks when the range changes.
+YT_PREVIEW_JS = """
+function loadYouTubeApi() {
+    if (!window.__ytApi) {
+        window.__ytApi = new Promise((resolve) => {
+            if (window.YT && window.YT.Player) {
+                resolve(window.YT);
+                return;
+            }
+            const previous = window.onYouTubeIframeAPIReady;
+            window.onYouTubeIframeAPIReady = () => {
+                if (previous) previous();
+                resolve(window.YT);
+            };
+            const tag = document.createElement("script");
+            tag.src = "https://www.youtube.com/iframe_api";
+            document.head.appendChild(tag);
+        });
+    }
+    return window.__ytApi;
+}
+
+export default function({ parentElement, data }) {
+    const root = parentElement.querySelector(".yt-preview");
+    const state = root.__state || (root.__state = {});
+    const { video_id, start, end } = data;
+    state.end = end;
+
+    if (state.videoId !== video_id) {
+        state.videoId = video_id;
+        state.start = start;
+        state.lastEnd = end;
+        state.player = null;
+        root.innerHTML = "<div></div>";
+
+        loadYouTubeApi().then((YT) => {
+            state.player = new YT.Player(root.firstChild, {
+                videoId: video_id,
+                playerVars: { start: start, rel: 0 },
+                events: {
+                    // After seeking a not-yet-started video, pause as soon as
+                    // the frame is rendered (pausing earlier leaves it black).
+                    onStateChange: (event) => {
+                        if (event.data === YT.PlayerState.PLAYING && state.pauseOnPlay) {
+                            state.pauseOnPlay = false;
+                            event.target.pauseVideo();
+                            if (!state.wasMuted) event.target.unMute();
+                        }
+                    },
+                },
+            });
+
+            // Stop playback at the end of the selected range.
+            const timer = setInterval(() => {
+                if (!root.isConnected) {
+                    clearInterval(timer);
+                    return;
+                }
+                const player = state.player;
+                if (
+                    player && player.getPlayerState &&
+                    player.getPlayerState() === YT.PlayerState.PLAYING &&
+                    player.getCurrentTime() >= state.end
+                ) {
+                    player.pauseVideo();
+                }
+            }, 250);
+        });
+        return;
+    }
+
+    const player = state.player;
+    let target = null;
+    if (start !== state.start) target = start;
+    else if (end !== state.lastEnd) target = end;
+    state.start = start;
+    state.lastEnd = end;
+
+    if (target === null || !player || !player.seekTo) return;
+
+    const playerState = player.getPlayerState();
+    const { PLAYING, PAUSED, BUFFERING } = window.YT.PlayerState;
+
+    if (playerState !== PLAYING && playerState !== PAUSED && playerState !== BUFFERING) {
+        // Seeking an unstarted/cued/ended video starts playback.
+        if (!state.pauseOnPlay) state.wasMuted = player.isMuted();
+        state.pauseOnPlay = true;
+        player.mute();
+    }
+    player.seekTo(target, true);
+}
+"""
+
+yt_preview = st.components.v2.component(
+    "yt_preview",
+    html='<div class="yt-preview"></div>',
+    css="""
+.yt-preview, .yt-preview iframe {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border: 0;
+}
+""",
+    js=YT_PREVIEW_JS,
+    isolate_styles=False
+)
 
 def to_seconds(value):
     return value.hour * 3600 + value.minute * 60 + value.second
@@ -83,7 +190,7 @@ if not valid_youtube_url(url):
     st.stop()
 
 try:
-    duration = get_video_duration(url)
+    duration, video_id = get_video_info(url)
 
 except subprocess.TimeoutExpired:
     st.error("Loading video information timed out. Please try again.")
@@ -144,6 +251,17 @@ if range_key not in st.session_state:
     st.session_state[range_key] = (time(0, 0, 0), to_time(min(60, duration)))
     sync_text_from_slider()
 
+start_time, end_time = st.session_state[range_key]
+
+start = to_seconds(start_time)
+end = to_seconds(end_time)
+
+if video_id:
+    yt_preview(
+        data={"video_id": video_id, "start": start, "end": end},
+        key=f"preview_{url}"
+    )
+
 st.slider(
     "Clip range",
     min_value=time(0, 0, 0),
@@ -164,11 +282,6 @@ with col2:
 
 if st.session_state.get(error_key):
     st.warning(st.session_state[error_key])
-
-start_time, end_time = st.session_state[range_key]
-
-start = to_seconds(start_time)
-end = to_seconds(end_time)
 
 st.caption(
     f"Clip length: {to_time(max(end - start, 0)).strftime('%H:%M:%S')}"

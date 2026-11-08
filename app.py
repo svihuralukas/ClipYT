@@ -304,12 +304,12 @@ quality = st.selectbox(
     )
 )
 
-output_format = st.selectbox(
-    "Output format",
-    ["MP4 (Video)", "MP3 (Audio)"]
-)
+download_video = st.button("Download clip", type="primary", use_container_width=True)
+download_audio = st.button("Download audio (MP3)", use_container_width=True)
 
-if st.button("Download clip", type="primary", use_container_width=True):
+if download_video or download_audio:
+
+    output_format = "MP3 (Audio)" if download_audio else "MP4 (Video)"
 
     if end <= start:
         st.error("End time must be later than start time.")

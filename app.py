@@ -1,4 +1,5 @@
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -98,15 +99,73 @@ if duration is None:
 
 duration = int(duration)
 
-start_time, end_time = st.slider(
+range_key = f"range_{url}"
+start_key = f"start_{url}"
+end_key = f"end_{url}"
+error_key = f"time_error_{url}"
+
+def parse_time(value):
+    match = re.fullmatch(r"(\d{1,2}):(\d{2}):(\d{2})", value.strip())
+    if not match:
+        return None
+    h, m, s = map(int, match.groups())
+    if m >= 60 or s >= 60:
+        return None
+    return h * 3600 + m * 60 + s
+
+def sync_text_from_slider():
+    start_value, end_value = st.session_state[range_key]
+    st.session_state[start_key] = start_value.strftime("%H:%M:%S")
+    st.session_state[end_key] = end_value.strftime("%H:%M:%S")
+    st.session_state[error_key] = None
+
+def sync_slider_from_text():
+    start_value = parse_time(st.session_state[start_key])
+    end_value = parse_time(st.session_state[end_key])
+
+    if start_value is None or end_value is None:
+        error = "Time must be in HH:MM:SS format."
+    elif end_value > duration:
+        error = (
+            f"End time exceeds video length "
+            f"({to_time(duration).strftime('%H:%M:%S')})."
+        )
+    elif start_value > end_value:
+        error = "Start time must not be later than end time."
+    else:
+        st.session_state[range_key] = (to_time(start_value), to_time(end_value))
+        st.session_state[error_key] = None
+        return
+
+    sync_text_from_slider()
+    st.session_state[error_key] = error
+
+if range_key not in st.session_state:
+    st.session_state[range_key] = (time(0, 0, 0), to_time(min(60, duration)))
+    sync_text_from_slider()
+
+st.slider(
     "Clip range",
     min_value=time(0, 0, 0),
     max_value=to_time(duration),
-    value=(time(0, 0, 0), to_time(min(60, duration))),
     step=timedelta(seconds=1),
     format="HH:mm:ss",
-    key=f"range_{url}"
+    key=range_key,
+    on_change=sync_text_from_slider
 )
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.text_input("Start (HH:MM:SS)", key=start_key, on_change=sync_slider_from_text)
+
+with col2:
+    st.text_input("End (HH:MM:SS)", key=end_key, on_change=sync_slider_from_text)
+
+if st.session_state.get(error_key):
+    st.warning(st.session_state[error_key])
+
+start_time, end_time = st.session_state[range_key]
 
 start = to_seconds(start_time)
 end = to_seconds(end_time)

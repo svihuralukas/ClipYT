@@ -2,6 +2,8 @@
 import re
 import subprocess
 import sys
+import tkinter as tk
+from tkinter import filedialog
 from pathlib import Path
 from datetime import datetime, time, timedelta
 from urllib.parse import urlparse
@@ -175,6 +177,22 @@ yt_preview = st.components.v2.component(
     isolate_styles=False
 )
 
+def ask_save_path(default_name, extension):
+    # Native "Save As" dialog; works because the app runs on the user's own PC.
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    path = filedialog.asksaveasfilename(
+        parent=root,
+        title="Save as",
+        initialdir=OUTPUT_DIR,
+        initialfile=default_name,
+        defaultextension=extension,
+        filetypes=[(extension[1:].upper(), f"*{extension}")]
+    )
+    root.destroy()
+    return Path(path) if path else None
+
 def to_seconds(value):
     return value.hour * 3600 + value.minute * 60 + value.second
 
@@ -316,14 +334,24 @@ if download_video or download_audio:
         st.stop()
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_template = str(
-        OUTPUT_DIR / f"clip_{timestamp}.%(ext)s"
-    )
 
     if output_format == "MP3 (Audio)":
         expected_extension = ".mp3"
     else:
         expected_extension = ".mp4"
+
+    save_path = ask_save_path(f"clip_{timestamp}{expected_extension}", expected_extension)
+
+    if save_path is None:
+        st.info("Download cancelled.")
+        st.stop()
+
+    save_path = save_path.with_suffix(expected_extension)
+
+    # "%" is special in yt-dlp output templates.
+    output_template = (
+        str(save_path.with_suffix("")).replace("%", "%%") + ".%(ext)s"
+    )
 
     # Progress UI
     st.subheader("Download progress")
@@ -470,7 +498,7 @@ if download_video or download_audio:
         with yt_dlp.YoutubeDL(ydl_options) as ydl:
             ydl.extract_info(url, download=True)
 
-        video_path = OUTPUT_DIR / f"clip_{timestamp}{expected_extension}"
+        video_path = save_path
 
         if not video_path.exists():
             st.error("Resulting file not found.")
